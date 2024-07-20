@@ -3887,8 +3887,8 @@ static void gfx_step() {
                 return;
             }
         } else {
-            SPDLOG_CRITICAL("Unhandled OP code: 0x{:X}, for loaded ucode: {}", (uint8_t)opcode,
-                            (uint32_t)ucode_handler_index);
+            // SPDLOG_CRITICAL("Unhandled OP code: 0x{:X}, for loaded ucode: {}", (uint8_t)opcode,
+            //                 (uint32_t)ucode_handler_index);
         }
     }
 

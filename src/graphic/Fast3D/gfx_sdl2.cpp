@@ -42,6 +42,7 @@ static SDL_Window* wnd;
 static SDL_GLContext ctx;
 static SDL_Renderer* renderer;
 static int sdl_to_lus_table[512];
+static bool keys_down[512];
 static bool vsync_enabled = true;
 // OTRTODO: These are redundant. Info can be queried from SDL.
 static int window_width = DESIRED_SCREEN_WIDTH;
@@ -301,6 +302,8 @@ static void gfx_sdl_init(const char* game_name, const char* gfx_api_name, bool s
     window_width = width;
     window_height = height;
 
+    memset(&keys_down[0], 0, sizeof(keys_down));
+
     SDL_Init(SDL_INIT_VIDEO);
 
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
@@ -464,6 +467,7 @@ static int untranslate_scancode(int translatedScancode) {
 static void gfx_sdl_onkeydown(int scancode) {
     int key = translate_scancode(scancode);
     if (on_key_down_callback != NULL) {
+        SDL_Log("Key Down for %d", scancode);
         on_key_down_callback(key);
     }
 }
@@ -471,6 +475,7 @@ static void gfx_sdl_onkeydown(int scancode) {
 static void gfx_sdl_onkeyup(int scancode) {
     int key = translate_scancode(scancode);
     if (on_key_up_callback != NULL) {
+        SDL_Log("Key Up for %d", scancode);
         on_key_up_callback(key);
     }
 }
@@ -479,14 +484,33 @@ static void gfx_sdl_handle_single_event(SDL_Event& event) {
     Ship::WindowEvent event_impl;
     event_impl.Sdl = { &event };
     Ship::Context::GetInstance()->GetWindow()->GetGui()->Update(event_impl);
+
+    int32_t mouse_x = 0;
+    int32_t mouse_y = 0;
+
     switch (event.type) {
+        case SDL_MOUSEMOTION:
+            SDL_Log("Mouse moved!");
+            mouse_x = event.motion.xrel;
+            mouse_y = event.motion.yrel;
+            break;
 #ifndef TARGET_WEB
         // Scancodes are broken in Emscripten SDL2: https://bugzilla.libsdl.org/show_bug.cgi?id=3259
         case SDL_KEYDOWN:
-            gfx_sdl_onkeydown(event.key.keysym.scancode);
+            if(!keys_down[event.key.keysym.scancode])
+            {
+                SDL_Log("Key Up!");
+                gfx_sdl_onkeydown(event.key.keysym.scancode);
+                keys_down[event.key.keysym.scancode] = true;
+            }
             break;
         case SDL_KEYUP:
-            gfx_sdl_onkeyup(event.key.keysym.scancode);
+            if(keys_down[event.key.keysym.scancode])
+            {
+                keys_down[event.key.keysym.scancode] = false;
+                SDL_Log("Key Down!");
+                gfx_sdl_onkeyup(event.key.keysym.scancode);
+            }
             break;
 #endif
         case SDL_WINDOWEVENT:
@@ -510,14 +534,31 @@ static void gfx_sdl_handle_single_event(SDL_Event& event) {
 }
 
 static void gfx_sdl_handle_events(void) {
-    SDL_Event event;
+    static const uint32_t number_of_events = 5;
+    SDL_Event event[number_of_events];
+    uint32_t read_event_amounts = 0;
+    
     SDL_PumpEvents();
-    while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_CONTROLLERDEVICEADDED - 1) > 0) {
-        gfx_sdl_handle_single_event(event);
+    do
+    {
+        read_event_amounts = SDL_PeepEvents(&event[0], number_of_events, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_CONTROLLERDEVICEADDED - 1);
+        read_event_amounts += SDL_PeepEvents(&event[read_event_amounts], number_of_events - read_event_amounts, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_CONTROLLERDEVICEADDED - 1);
+        if(read_event_amounts > 0)
+        {
+            SDL_Log("There are %d new events to process", read_event_amounts);
+        }
+        for(uint32_t i = 0; i < read_event_amounts; i++)
+        {
+            gfx_sdl_handle_single_event(event[i]);
+        }
     }
-    while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_CONTROLLERDEVICEREMOVED + 1, SDL_LASTEVENT) > 0) {
-        gfx_sdl_handle_single_event(event);
-    }
+    while(read_event_amounts > 0);
+    // while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_CONTROLLERDEVICEADDED - 1) > 0) {
+    //     gfx_sdl_handle_single_event(event);
+    // }
+    // while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_CONTROLLERDEVICEREMOVED + 1, SDL_LASTEVENT) > 0) {
+    //     gfx_sdl_handle_single_event(event);
+    // }
 }
 
 static bool gfx_sdl_start_frame(void) {
