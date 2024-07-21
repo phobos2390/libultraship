@@ -6,6 +6,7 @@
 #endif
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <cstdint>
 #include "window/gui/GuiElement.h"
 
 namespace Ship {
